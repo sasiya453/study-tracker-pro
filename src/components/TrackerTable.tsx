@@ -1,6 +1,7 @@
 import { useState, Fragment } from 'react';
 import { Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import AnimatedCheckbox from './AnimatedCheckbox';
+import BulkUpload from './BulkUpload';
 import { type SubjectData, TOTAL_ROUNDS } from '@/hooks/useStudyData';
 
 interface TrackerTableProps {
@@ -8,11 +9,12 @@ interface TrackerTableProps {
   data: SubjectData;
   onToggle: (rowId: string, roundIndex: number, field: 'mcq' | 'essay') => void;
   onAddRow: (name: string) => void;
+  onAddRows?: (names: string[]) => void;
   onDeleteRow: (rowId: string) => void;
   onRenameRow?: (rowId: string, name: string) => void;
 }
 
-const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow, onRenameRow }: TrackerTableProps) => {
+const TrackerTable = ({ data, onToggle, onAddRow, onAddRows, onDeleteRow, onRenameRow }: TrackerTableProps) => {
   const [newRowName, setNewRowName] = useState('');
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -144,14 +146,14 @@ const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow, onRenameRow }: Tr
       </div>
 
       {/* Add row */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <input
           type="text"
           value={newRowName}
           onChange={(e) => setNewRowName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           placeholder="Enter year or unit name..."
-          className="flex-1 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+          className="flex-1 min-w-[200px] rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
         />
         <button
           onClick={handleAdd}
@@ -161,6 +163,7 @@ const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow, onRenameRow }: Tr
           <Plus className="w-4 h-4" />
           Add Row
         </button>
+        {onAddRows && <BulkUpload onUpload={onAddRows} />}
       </div>
     </div>
   );

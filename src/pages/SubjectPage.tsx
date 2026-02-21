@@ -6,7 +6,7 @@ import { useStudyData, getSubjectProgress } from '@/hooks/useStudyData';
 const SubjectPage = () => {
   const { subjectKey } = useParams<{ subjectKey: string }>();
   const navigate = useNavigate();
-  const { data, subjects, toggleCheck, addRow, deleteRow, renameRow } = useStudyData();
+  const { data, subjects, toggleCheck, addRow, addRows, deleteRow, renameRow } = useStudyData();
 
   const subject = subjects.find(s => s.key === subjectKey);
   if (!subject || !subjectKey) {
@@ -58,6 +58,7 @@ const SubjectPage = () => {
             data={subjectData}
             onToggle={(rowId, roundIndex, field) => toggleCheck(subjectKey, rowId, roundIndex, field)}
             onAddRow={(name) => addRow(subjectKey, name)}
+            onAddRows={(names) => addRows(subjectKey, names)}
             onDeleteRow={(rowId) => deleteRow(subjectKey, rowId)}
             onRenameRow={(rowId, name) => renameRow(subjectKey, rowId, name)}
           />
