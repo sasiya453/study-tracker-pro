@@ -43,7 +43,7 @@ export type Database = {
           rounds: Json
           sort_order: number
           subject_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -52,7 +52,7 @@ export type Database = {
           rounds?: Json
           sort_order?: number
           subject_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -61,7 +61,7 @@ export type Database = {
           rounds?: Json
           sort_order?: number
           subject_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -81,7 +81,7 @@ export type Database = {
           key: string
           label: string
           sort_order: number
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -90,7 +90,7 @@ export type Database = {
           key: string
           label: string
           sort_order?: number
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -99,7 +99,7 @@ export type Database = {
           key?: string
           label?: string
           sort_order?: number
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
