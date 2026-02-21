@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export interface RoundData {
@@ -22,7 +21,7 @@ export interface SubjectInfo {
   key: string;
   label: string;
   icon: string;
-  dbId?: string; // Supabase UUID
+  dbId?: string;
 }
 
 export const TOTAL_ROUNDS = 8;
@@ -63,22 +62,16 @@ export function getTotalProgress(subjects: SubjectInfo[], data: Record<string, S
 }
 
 export function useStudyData() {
-  const { user } = useAuth();
   const [subjects, setSubjects] = useState<SubjectInfo[]>([]);
   const [data, setData] = useState<Record<string, SubjectData>>({});
   const [loading, setLoading] = useState(true);
 
-  // Load from Supabase
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    
     const load = async () => {
       setLoading(true);
-      // Fetch subjects
       const { data: subjectsData, error: sErr } = await supabase
         .from('subjects')
         .select('*')
-        .eq('user_id', user.id)
         .order('sort_order', { ascending: true });
       
       if (sErr) { toast.error('Failed to load subjects'); setLoading(false); return; }
@@ -90,16 +83,13 @@ export function useStudyData() {
         dbId: s.id,
       }));
 
-      // Fetch all rows
       const { data: rowsData, error: rErr } = await supabase
         .from('study_rows')
         .select('*')
-        .eq('user_id', user.id)
         .order('sort_order', { ascending: true });
 
       if (rErr) { toast.error('Failed to load data'); setLoading(false); return; }
 
-      // Build subject ID -> key map
       const idToKey: Record<string, string> = {};
       for (const s of subjectsData || []) idToKey[s.id] = s.key;
 
@@ -110,7 +100,6 @@ export function useStudyData() {
         const key = idToKey[row.subject_id];
         if (!key || !dataMap[key]) continue;
         const rounds = Array.isArray(row.rounds) ? (row.rounds as unknown as RoundData[]) : createEmptyRounds();
-        // Ensure rounds has correct length
         while (rounds.length < TOTAL_ROUNDS) rounds.push({ mcq: false, essay: false });
         dataMap[key].rows.push({ id: row.id, name: row.name, rounds });
       }
@@ -121,14 +110,13 @@ export function useStudyData() {
     };
 
     load();
-  }, [user]);
+  }, []);
 
   const getSubjectDbId = useCallback((subjectKey: string) => {
     return subjects.find(s => s.key === subjectKey)?.dbId;
   }, [subjects]);
 
   const toggleCheck = useCallback(async (subject: string, rowId: string, roundIndex: number, field: 'mcq' | 'essay') => {
-    // Optimistic update
     setData(prev => {
       const subjectData = { ...prev[subject] };
       subjectData.rows = subjectData.rows.map(row => {
@@ -139,7 +127,6 @@ export function useStudyData() {
       return { ...prev, [subject]: subjectData };
     });
 
-    // Get updated rounds
     const row = data[subject]?.rows.find(r => r.id === rowId);
     if (!row) return;
     const updatedRounds = row.rounds.map((r, i) => i !== roundIndex ? r : { ...r, [field]: !r[field] });
@@ -152,14 +139,13 @@ export function useStudyData() {
   }, [data]);
 
   const addRow = useCallback(async (subject: string, name: string) => {
-    if (!user) return;
     const subjectDbId = getSubjectDbId(subject);
     if (!subjectDbId) return;
 
     const rounds = createEmptyRounds();
     const { data: inserted, error } = await supabase
       .from('study_rows')
-      .insert({ subject_id: subjectDbId, user_id: user.id, name, rounds: rounds as any })
+      .insert({ subject_id: subjectDbId, name, rounds: rounds as any })
       .select()
       .single();
 
@@ -170,16 +156,15 @@ export function useStudyData() {
       subjectData.rows = [...subjectData.rows, { id: inserted.id, name, rounds }];
       return { ...prev, [subject]: subjectData };
     });
-  }, [user, getSubjectDbId]);
+  }, [getSubjectDbId]);
 
   const addRows = useCallback(async (subject: string, names: string[]) => {
-    if (!user || names.length === 0) return;
+    if (names.length === 0) return;
     const subjectDbId = getSubjectDbId(subject);
     if (!subjectDbId) return;
 
     const rows = names.map(name => ({
       subject_id: subjectDbId,
-      user_id: user.id,
       name,
       rounds: createEmptyRounds() as any,
     }));
@@ -203,7 +188,7 @@ export function useStudyData() {
     });
 
     toast.success(`Added ${inserted.length} rows`);
-  }, [user, getSubjectDbId]);
+  }, [getSubjectDbId]);
 
   const deleteRow = useCallback(async (subject: string, rowId: string) => {
     setData(prev => {
@@ -228,12 +213,11 @@ export function useStudyData() {
   }, []);
 
   const addSubject = useCallback(async (label: string, icon: string) => {
-    if (!user) return '';
     const key = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
     const { data: inserted, error } = await supabase
       .from('subjects')
-      .insert({ user_id: user.id, key, label, icon, sort_order: subjects.length })
+      .insert({ key, label, icon, sort_order: subjects.length })
       .select()
       .single();
 
@@ -242,7 +226,7 @@ export function useStudyData() {
     setSubjects(prev => [...prev, { key, label, icon, dbId: inserted.id }]);
     setData(prev => ({ ...prev, [key]: { rows: [] } }));
     return key;
-  }, [user, subjects.length]);
+  }, [subjects.length]);
 
   const editSubject = useCallback(async (key: string, label: string, icon: string) => {
     const dbId = getSubjectDbId(key);

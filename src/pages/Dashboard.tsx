@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, LogOut } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import CircularProgress from '@/components/CircularProgress';
 import SubjectCard from '@/components/SubjectCard';
 import { useStudyData, getSubjectProgress, getTotalProgress } from '@/hooks/useStudyData';
-import { useAuth } from '@/contexts/AuthContext';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +15,6 @@ const EMOJI_OPTIONS = ['📚', '⚗️', '⚛️', '📐', '🧬', '🌍', '📖
 
 const Dashboard = () => {
   const { data, subjects, addSubject, editSubject, deleteSubject, loading } = useStudyData();
-  const { signOut, user } = useAuth();
   const totalProgress = getTotalProgress(subjects, data);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -62,23 +60,13 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         {/* Header */}
-        <div className="mb-10 animate-fade-in flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-              A/L Study Tracker
-            </h1>
-            <p className="mt-2 text-muted-foreground">
-              Track your past paper progress across all subjects
-            </p>
-          </div>
-          <button
-            onClick={signOut}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
+        <div className="mb-10 animate-fade-in">
+          <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
+            A/L Study Tracker
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Track your past paper progress across all subjects
+          </p>
         </div>
 
         {/* Progress Ring */}
