@@ -1,14 +1,14 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import TrackerTable from '@/components/TrackerTable';
-import { useStudyData, SUBJECTS, getSubjectProgress, type SubjectKey } from '@/hooks/useStudyData';
+import { useStudyData, getSubjectProgress } from '@/hooks/useStudyData';
 
 const SubjectPage = () => {
   const { subjectKey } = useParams<{ subjectKey: string }>();
   const navigate = useNavigate();
-  const { data, toggleCheck, addRow, deleteRow } = useStudyData();
+  const { data, subjects, toggleCheck, addRow, deleteRow, renameRow } = useStudyData();
 
-  const subject = SUBJECTS.find(s => s.key === subjectKey);
+  const subject = subjects.find(s => s.key === subjectKey);
   if (!subject || !subjectKey) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -17,8 +17,7 @@ const SubjectPage = () => {
     );
   }
 
-  const key = subjectKey as SubjectKey;
-  const subjectData = data[key];
+  const subjectData = data[subjectKey] || { rows: [] };
   const progress = getSubjectProgress(subjectData);
 
   return (
@@ -55,11 +54,12 @@ const SubjectPage = () => {
         {/* Table */}
         <div className="animate-fade-in" style={{ animationDelay: '0.1s', opacity: 0 }}>
           <TrackerTable
-            subject={key}
+            subject={subjectKey}
             data={subjectData}
-            onToggle={(rowId, roundIndex, field) => toggleCheck(key, rowId, roundIndex, field)}
-            onAddRow={(name) => addRow(key, name)}
-            onDeleteRow={(rowId) => deleteRow(key, rowId)}
+            onToggle={(rowId, roundIndex, field) => toggleCheck(subjectKey, rowId, roundIndex, field)}
+            onAddRow={(name) => addRow(subjectKey, name)}
+            onDeleteRow={(rowId) => deleteRow(subjectKey, rowId)}
+            onRenameRow={(rowId, name) => renameRow(subjectKey, rowId, name)}
           />
         </div>
       </div>

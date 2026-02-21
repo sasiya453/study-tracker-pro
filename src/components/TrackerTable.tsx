@@ -1,24 +1,45 @@
-import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { useState, Fragment } from 'react';
+import { Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import AnimatedCheckbox from './AnimatedCheckbox';
-import { type SubjectData, type SubjectKey, TOTAL_ROUNDS } from '@/hooks/useStudyData';
+import { type SubjectData, TOTAL_ROUNDS } from '@/hooks/useStudyData';
 
 interface TrackerTableProps {
-  subject: SubjectKey;
+  subject: string;
   data: SubjectData;
   onToggle: (rowId: string, roundIndex: number, field: 'mcq' | 'essay') => void;
   onAddRow: (name: string) => void;
   onDeleteRow: (rowId: string) => void;
+  onRenameRow?: (rowId: string, name: string) => void;
 }
 
-const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow }: TrackerTableProps) => {
+const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow, onRenameRow }: TrackerTableProps) => {
   const [newRowName, setNewRowName] = useState('');
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const handleAdd = () => {
     const name = newRowName.trim();
     if (!name) return;
     onAddRow(name);
     setNewRowName('');
+  };
+
+  const startEditing = (rowId: string, currentName: string) => {
+    setEditingRowId(rowId);
+    setEditingName(currentName);
+  };
+
+  const confirmEdit = () => {
+    if (editingRowId && editingName.trim() && onRenameRow) {
+      onRenameRow(editingRowId, editingName.trim());
+    }
+    setEditingRowId(null);
+    setEditingName('');
+  };
+
+  const cancelEdit = () => {
+    setEditingRowId(null);
+    setEditingName('');
   };
 
   return (
@@ -51,7 +72,40 @@ const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow }: TrackerTablePro
               {data.rows.map((row, rowIndex) => (
                 <tr key={row.id} className={`row-hover ${rowIndex % 2 === 0 ? 'zebra-even' : 'zebra-odd'}`}>
                   <td className="table-cell text-left font-medium text-foreground">
-                    {row.name}
+                    {editingRowId === row.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') confirmEdit();
+                            if (e.key === 'Escape') cancelEdit();
+                          }}
+                          autoFocus
+                          className="w-24 rounded border border-border bg-background px-2 py-0.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <button onClick={confirmEdit} className="p-0.5 text-success hover:text-success/80 transition-colors">
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={cancelEdit} className="p-0.5 text-muted-foreground hover:text-foreground transition-colors">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 group">
+                        <span>{row.name}</span>
+                        {onRenameRow && (
+                          <button
+                            onClick={() => startEditing(row.id, row.name)}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-foreground transition-all"
+                            aria-label={`Edit ${row.name}`}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {row.rounds.map((round, ri) => (
                     <Fragment key={ri}>
@@ -111,8 +165,5 @@ const TrackerTable = ({ data, onToggle, onAddRow, onDeleteRow }: TrackerTablePro
     </div>
   );
 };
-
-// Need to import Fragment
-import { Fragment } from 'react';
 
 export default TrackerTable;
