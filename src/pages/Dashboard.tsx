@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, LogOut } from 'lucide-react';
 import CircularProgress from '@/components/CircularProgress';
 import SubjectCard from '@/components/SubjectCard';
 import { useStudyData, getSubjectProgress, getTotalProgress } from '@/hooks/useStudyData';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,8 @@ import {
 const EMOJI_OPTIONS = ['📚', '⚗️', '⚛️', '📐', '🧬', '🌍', '📖', '🔬', '💻', '🎨', '🎵', '📊', '🧮', '🏛️', '✏️'];
 
 const Dashboard = () => {
-  const { data, subjects, addSubject, editSubject, deleteSubject } = useStudyData();
+  const { data, subjects, addSubject, editSubject, deleteSubject, loading } = useStudyData();
+  const { signOut, user } = useAuth();
   const totalProgress = getTotalProgress(subjects, data);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -48,17 +50,35 @@ const Dashboard = () => {
     setEditingSubject(null);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <span className="text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         {/* Header */}
-        <div className="mb-10 animate-fade-in">
-          <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-            A/L Study Tracker
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Track your past paper progress across all subjects
-          </p>
+        <div className="mb-10 animate-fade-in flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
+              A/L Study Tracker
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              Track your past paper progress across all subjects
+            </p>
+          </div>
+          <button
+            onClick={signOut}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
         </div>
 
         {/* Progress Ring */}
@@ -79,7 +99,6 @@ const Dashboard = () => {
                 icon={subject.icon}
                 progress={getSubjectProgress(data[subject.key] || { rows: [] })}
               />
-              {/* Edit / Delete overlay */}
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                 <button
                   onClick={(e) => { e.stopPropagation(); startEdit(subject.key, subject.label, subject.icon); }}
@@ -99,7 +118,6 @@ const Dashboard = () => {
             </div>
           ))}
 
-          {/* Add Subject Card */}
           <div
             onClick={() => setShowAddDialog(true)}
             className="subject-card animate-scale-in flex flex-col items-center justify-center gap-2 min-h-[120px] border-dashed border-2 border-border hover:border-primary/50"
@@ -123,49 +141,19 @@ const Dashboard = () => {
           <div className="space-y-4 pt-2">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">Subject Name</label>
-              <input
-                type="text"
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                placeholder="e.g. Biology"
-                className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                autoFocus
-              />
+              <input type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} placeholder="e.g. Biology" className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all" autoFocus />
             </div>
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">Icon</label>
               <div className="flex flex-wrap gap-2">
                 {EMOJI_OPTIONS.map(emoji => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => setNewIcon(emoji)}
-                    className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${
-                      newIcon === emoji
-                        ? 'bg-primary/20 ring-2 ring-primary'
-                        : 'bg-muted hover:bg-muted/80'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
+                  <button key={emoji} type="button" onClick={() => setNewIcon(emoji)} className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${newIcon === emoji ? 'bg-primary/20 ring-2 ring-primary' : 'bg-muted hover:bg-muted/80'}`}>{emoji}</button>
                 ))}
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowAddDialog(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={!newLabel.trim()}
-                className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                Add Subject
-              </button>
+              <button onClick={() => setShowAddDialog(false)} className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+              <button onClick={handleAdd} disabled={!newLabel.trim()} className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">Add Subject</button>
             </div>
           </div>
         </DialogContent>
@@ -181,48 +169,19 @@ const Dashboard = () => {
           <div className="space-y-4 pt-2">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">Subject Name</label>
-              <input
-                type="text"
-                value={editLabel}
-                onChange={(e) => setEditLabel(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && confirmEdit()}
-                className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                autoFocus
-              />
+              <input type="text" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmEdit()} className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all" autoFocus />
             </div>
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">Icon</label>
               <div className="flex flex-wrap gap-2">
                 {EMOJI_OPTIONS.map(emoji => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => setEditIcon(emoji)}
-                    className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${
-                      editIcon === emoji
-                        ? 'bg-primary/20 ring-2 ring-primary'
-                        : 'bg-muted hover:bg-muted/80'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
+                  <button key={emoji} type="button" onClick={() => setEditIcon(emoji)} className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${editIcon === emoji ? 'bg-primary/20 ring-2 ring-primary' : 'bg-muted hover:bg-muted/80'}`}>{emoji}</button>
                 ))}
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setEditingSubject(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmEdit}
-                disabled={!editLabel.trim()}
-                className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                Save Changes
-              </button>
+              <button onClick={() => setEditingSubject(null)} className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+              <button onClick={confirmEdit} disabled={!editLabel.trim()} className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">Save Changes</button>
             </div>
           </div>
         </DialogContent>
@@ -233,26 +192,11 @@ const Dashboard = () => {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete Subject</DialogTitle>
-            <DialogDescription>
-              This will permanently delete the subject and all its progress data. This action cannot be undone.
-            </DialogDescription>
+            <DialogDescription>This will permanently delete the subject and all its progress data. This action cannot be undone.</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-4">
-            <button
-              onClick={() => setDeleteConfirm(null)}
-              className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                if (deleteConfirm) deleteSubject(deleteConfirm);
-                setDeleteConfirm(null);
-              }}
-              className="px-4 py-2 text-sm rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all"
-            >
-              Delete
-            </button>
+            <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+            <button onClick={() => { if (deleteConfirm) deleteSubject(deleteConfirm); setDeleteConfirm(null); }} className="px-4 py-2 text-sm rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all">Delete</button>
           </div>
         </DialogContent>
       </Dialog>

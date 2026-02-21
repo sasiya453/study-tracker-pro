@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
-export interface SubjectData {
-  rows: RowData[];
+export interface RoundData {
+  mcq: boolean;
+  essay: boolean;
 }
 
 export interface RowData {
@@ -10,77 +14,21 @@ export interface RowData {
   rounds: RoundData[];
 }
 
-export interface RoundData {
-  mcq: boolean;
-  essay: boolean;
+export interface SubjectData {
+  rows: RowData[];
 }
 
 export interface SubjectInfo {
   key: string;
   label: string;
   icon: string;
+  dbId?: string; // Supabase UUID
 }
-
-export const DEFAULT_SUBJECTS: SubjectInfo[] = [
-  { key: 'chemistry', label: 'Chemistry', icon: '⚗️' },
-  { key: 'physics', label: 'Physics', icon: '⚛️' },
-  { key: 'combined-maths', label: 'Combined Maths', icon: '📐' },
-];
 
 export const TOTAL_ROUNDS = 8;
 
-const STORAGE_KEY = 'al-study-tracker';
-const SUBJECTS_KEY = 'al-study-subjects';
-
 function createEmptyRounds(): RoundData[] {
   return Array.from({ length: TOTAL_ROUNDS }, () => ({ mcq: false, essay: false }));
-}
-
-function loadSubjects(): SubjectInfo[] {
-  try {
-    const raw = localStorage.getItem(SUBJECTS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return DEFAULT_SUBJECTS;
-}
-
-function createDefaultData(subjects: SubjectInfo[]): Record<string, SubjectData> {
-  const data: Record<string, SubjectData> = {};
-  for (const s of subjects) {
-    data[s.key] = {
-      rows: [
-        { id: crypto.randomUUID(), name: '2015', rounds: createEmptyRounds() },
-        { id: crypto.randomUUID(), name: '2016', rounds: createEmptyRounds() },
-        { id: crypto.randomUUID(), name: '2017', rounds: createEmptyRounds() },
-        { id: crypto.randomUUID(), name: '2018', rounds: createEmptyRounds() },
-        { id: crypto.randomUUID(), name: '2019', rounds: createEmptyRounds() },
-      ],
-    };
-  }
-  return data;
-}
-
-function loadData(subjects: SubjectInfo[]): Record<string, SubjectData> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Ensure all subjects have data
-      for (const s of subjects) {
-        if (!parsed[s.key]) {
-          parsed[s.key] = {
-            rows: [
-              { id: crypto.randomUUID(), name: '2015', rounds: createEmptyRounds() },
-              { id: crypto.randomUUID(), name: '2016', rounds: createEmptyRounds() },
-              { id: crypto.randomUUID(), name: '2017', rounds: createEmptyRounds() },
-            ],
-          };
-        }
-      }
-      return parsed;
-    }
-  } catch { /* ignore */ }
-  return createDefaultData(subjects);
 }
 
 export function getSubjectProgress(data: SubjectData): number {
@@ -115,79 +63,211 @@ export function getTotalProgress(subjects: SubjectInfo[], data: Record<string, S
 }
 
 export function useStudyData() {
-  const [subjects, setSubjects] = useState<SubjectInfo[]>(loadSubjects);
-  const [data, setData] = useState<Record<string, SubjectData>>(() => loadData(subjects));
+  const { user } = useAuth();
+  const [subjects, setSubjects] = useState<SubjectInfo[]>([]);
+  const [data, setData] = useState<Record<string, SubjectData>>({});
+  const [loading, setLoading] = useState(true);
 
+  // Load from Supabase
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    if (!user) { setLoading(false); return; }
+    
+    const load = async () => {
+      setLoading(true);
+      // Fetch subjects
+      const { data: subjectsData, error: sErr } = await supabase
+        .from('subjects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true });
+      
+      if (sErr) { toast.error('Failed to load subjects'); setLoading(false); return; }
+      
+      const subs: SubjectInfo[] = (subjectsData || []).map((s: any) => ({
+        key: s.key,
+        label: s.label,
+        icon: s.icon,
+        dbId: s.id,
+      }));
 
-  useEffect(() => {
-    localStorage.setItem(SUBJECTS_KEY, JSON.stringify(subjects));
+      // Fetch all rows
+      const { data: rowsData, error: rErr } = await supabase
+        .from('study_rows')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true });
+
+      if (rErr) { toast.error('Failed to load data'); setLoading(false); return; }
+
+      // Build subject ID -> key map
+      const idToKey: Record<string, string> = {};
+      for (const s of subjectsData || []) idToKey[s.id] = s.key;
+
+      const dataMap: Record<string, SubjectData> = {};
+      for (const s of subs) dataMap[s.key] = { rows: [] };
+
+      for (const row of rowsData || []) {
+        const key = idToKey[row.subject_id];
+        if (!key || !dataMap[key]) continue;
+        const rounds = Array.isArray(row.rounds) ? (row.rounds as unknown as RoundData[]) : createEmptyRounds();
+        // Ensure rounds has correct length
+        while (rounds.length < TOTAL_ROUNDS) rounds.push({ mcq: false, essay: false });
+        dataMap[key].rows.push({ id: row.id, name: row.name, rounds });
+      }
+
+      setSubjects(subs);
+      setData(dataMap);
+      setLoading(false);
+    };
+
+    load();
+  }, [user]);
+
+  const getSubjectDbId = useCallback((subjectKey: string) => {
+    return subjects.find(s => s.key === subjectKey)?.dbId;
   }, [subjects]);
 
-  const toggleCheck = useCallback((subject: string, rowId: string, roundIndex: number, field: 'mcq' | 'essay') => {
+  const toggleCheck = useCallback(async (subject: string, rowId: string, roundIndex: number, field: 'mcq' | 'essay') => {
+    // Optimistic update
     setData(prev => {
       const subjectData = { ...prev[subject] };
       subjectData.rows = subjectData.rows.map(row => {
         if (row.id !== rowId) return row;
-        const rounds = row.rounds.map((r, i) => {
-          if (i !== roundIndex) return r;
-          return { ...r, [field]: !r[field] };
-        });
+        const rounds = row.rounds.map((r, i) => i !== roundIndex ? r : { ...r, [field]: !r[field] });
         return { ...row, rounds };
       });
       return { ...prev, [subject]: subjectData };
     });
-  }, []);
 
-  const addRow = useCallback((subject: string, name: string) => {
+    // Get updated rounds
+    const row = data[subject]?.rows.find(r => r.id === rowId);
+    if (!row) return;
+    const updatedRounds = row.rounds.map((r, i) => i !== roundIndex ? r : { ...r, [field]: !r[field] });
+
+    const { error } = await supabase
+      .from('study_rows')
+      .update({ rounds: updatedRounds as any })
+      .eq('id', rowId);
+    if (error) toast.error('Failed to save');
+  }, [data]);
+
+  const addRow = useCallback(async (subject: string, name: string) => {
+    if (!user) return;
+    const subjectDbId = getSubjectDbId(subject);
+    if (!subjectDbId) return;
+
+    const rounds = createEmptyRounds();
+    const { data: inserted, error } = await supabase
+      .from('study_rows')
+      .insert({ subject_id: subjectDbId, user_id: user.id, name, rounds: rounds as any })
+      .select()
+      .single();
+
+    if (error || !inserted) { toast.error('Failed to add row'); return; }
+
     setData(prev => {
       const subjectData = { ...prev[subject] };
-      subjectData.rows = [...subjectData.rows, { id: crypto.randomUUID(), name, rounds: createEmptyRounds() }];
+      subjectData.rows = [...subjectData.rows, { id: inserted.id, name, rounds }];
       return { ...prev, [subject]: subjectData };
     });
-  }, []);
+  }, [user, getSubjectDbId]);
 
-  const deleteRow = useCallback((subject: string, rowId: string) => {
+  const addRows = useCallback(async (subject: string, names: string[]) => {
+    if (!user || names.length === 0) return;
+    const subjectDbId = getSubjectDbId(subject);
+    if (!subjectDbId) return;
+
+    const rows = names.map(name => ({
+      subject_id: subjectDbId,
+      user_id: user.id,
+      name,
+      rounds: createEmptyRounds() as any,
+    }));
+
+    const { data: inserted, error } = await supabase
+      .from('study_rows')
+      .insert(rows)
+      .select();
+
+    if (error || !inserted) { toast.error('Failed to add rows'); return; }
+
+    setData(prev => {
+      const subjectData = { ...prev[subject] };
+      const newRows = inserted.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        rounds: Array.isArray(r.rounds) ? r.rounds as RoundData[] : createEmptyRounds(),
+      }));
+      subjectData.rows = [...subjectData.rows, ...newRows];
+      return { ...prev, [subject]: subjectData };
+    });
+
+    toast.success(`Added ${inserted.length} rows`);
+  }, [user, getSubjectDbId]);
+
+  const deleteRow = useCallback(async (subject: string, rowId: string) => {
     setData(prev => {
       const subjectData = { ...prev[subject] };
       subjectData.rows = subjectData.rows.filter(r => r.id !== rowId);
       return { ...prev, [subject]: subjectData };
     });
+
+    const { error } = await supabase.from('study_rows').delete().eq('id', rowId);
+    if (error) toast.error('Failed to delete');
   }, []);
 
-  const renameRow = useCallback((subject: string, rowId: string, name: string) => {
+  const renameRow = useCallback(async (subject: string, rowId: string, name: string) => {
     setData(prev => {
       const subjectData = { ...prev[subject] };
       subjectData.rows = subjectData.rows.map(r => r.id === rowId ? { ...r, name } : r);
       return { ...prev, [subject]: subjectData };
     });
+
+    const { error } = await supabase.from('study_rows').update({ name }).eq('id', rowId);
+    if (error) toast.error('Failed to rename');
   }, []);
 
-  const addSubject = useCallback((label: string, icon: string) => {
+  const addSubject = useCallback(async (label: string, icon: string) => {
+    if (!user) return '';
     const key = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const newSubject: SubjectInfo = { key, label, icon };
-    setSubjects(prev => [...prev, newSubject]);
-    setData(prev => ({
-      ...prev,
-      [key]: { rows: [] },
-    }));
+
+    const { data: inserted, error } = await supabase
+      .from('subjects')
+      .insert({ user_id: user.id, key, label, icon, sort_order: subjects.length })
+      .select()
+      .single();
+
+    if (error || !inserted) { toast.error('Failed to add subject'); return ''; }
+
+    setSubjects(prev => [...prev, { key, label, icon, dbId: inserted.id }]);
+    setData(prev => ({ ...prev, [key]: { rows: [] } }));
     return key;
-  }, []);
+  }, [user, subjects.length]);
 
-  const editSubject = useCallback((key: string, label: string, icon: string) => {
+  const editSubject = useCallback(async (key: string, label: string, icon: string) => {
+    const dbId = getSubjectDbId(key);
+    if (!dbId) return;
+
     setSubjects(prev => prev.map(s => s.key === key ? { ...s, label, icon } : s));
-  }, []);
 
-  const deleteSubject = useCallback((key: string) => {
+    const { error } = await supabase.from('subjects').update({ label, icon }).eq('id', dbId);
+    if (error) toast.error('Failed to update subject');
+  }, [getSubjectDbId]);
+
+  const deleteSubject = useCallback(async (key: string) => {
+    const dbId = getSubjectDbId(key);
+    if (!dbId) return;
+
     setSubjects(prev => prev.filter(s => s.key !== key));
     setData(prev => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
-  }, []);
 
-  return { data, subjects, toggleCheck, addRow, deleteRow, renameRow, addSubject, editSubject, deleteSubject };
+    const { error } = await supabase.from('subjects').delete().eq('id', dbId);
+    if (error) toast.error('Failed to delete subject');
+  }, [getSubjectDbId]);
+
+  return { data, subjects, loading, toggleCheck, addRow, addRows, deleteRow, renameRow, addSubject, editSubject, deleteSubject };
 }
